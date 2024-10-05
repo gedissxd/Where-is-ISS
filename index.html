@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Where is the ISS?</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <style>
+        body {
+            background-color: #000; /* Black background to simulate space */
+            color: #fff; /* White text for contrast */
+            font-family: 'Arial', sans-serif;
+            overflow: hidden; /* Prevent scrollbars */
+            position: relative; /* Position for absolute elements */
+        }
+        .star {
+            position: absolute;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.8);
+            animation: float 3s ease-in-out infinite; /* Floating effect */
+        }
+        @keyframes float {
+            0% { transform: translateY(0); }
+            50% { transform: translateY(-5px); } /* Float up */
+            100% { transform: translateY(0); } /* Float down */
+        }
+        .card {
+            perspective: 1000px; /* Perspective for 3D effect */
+        }
+        .card-inner {
+            transition: transform 0.5s;
+            transform-style: preserve-3d;
+            position: relative;
+        }
+        .card:hover .card-inner {
+            transform: rotateY(10deg) rotateX(5deg); /* Rotate on hover for 3D effect */
+        }
+        .card-front, .card-back {
+            position: absolute;
+            width: 100%;
+            height: auto; /* Allow height to adjust automatically */
+            backface-visibility: hidden;
+            border-radius: 12px;
+        }
+        .card-front {
+            background-color: rgba(255, 255, 255, 0); /* Fully transparent */
+            padding: 2rem; /* Increased padding */
+        }
+        .header {
+            backdrop-filter: blur(10px); /* Blurred background for header */
+            transition: background-color 0.5s ease; /* Smooth transition for background color */
+        }
+
+        header.scrolled {
+            background-color: rgba(0, 0, 0, 0.7); /* Darker transparent background when scrolled */
+        }
+
+        canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            pointer-events: none; /* Allow clicks to pass through the canvas */
+        }
+
+    </style>
+</head>
+<body class="flex flex-col min-h-screen">
+    <!-- Generate random stars -->
+    <script>
+        const numStars = 200; // Number of stars
+        const body = document.body;
+
+        const stars = [];
+        
+        for (let i = 0; i < numStars; i++) {
+            const star = document.createElement('div');
+            star.classList.add('star');
+            
+            // Randomize size and position
+            const size = Math.random() * (3 - 1) + 1; // Size between 1 and 3
+            star.style.width = `${size}px`;
+            star.style.height = `${size}px`;
+            
+            star.style.top = `${Math.random() * window.innerHeight}px`;
+            star.style.left = `${Math.random() * window.innerWidth}px`;
+
+            stars.push({
+                element: star,
+                x: parseFloat(star.style.left),
+                y: parseFloat(star.style.top)
+            });
+
+            body.appendChild(star);
+        }
+
+      // Create a canvas for connecting lines
+      const canvas = document.createElement('canvas');
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+      body.appendChild(canvas);
+      const ctx = canvas.getContext('2d');
+
+      // Track mouse movement
+      window.addEventListener('mousemove', (event) => {
+          drawLines(event.clientX, event.clientY);
+      });
+
+      // Draw lines from stars to cursor
+      function drawLines(mouseX, mouseY) {
+          ctx.clearRect(0, 0, canvas.width, canvas.height); // Clear previous lines
+          ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+          ctx.lineWidth = 1;
+
+          let connectedStars = []; // Array to hold connected stars
+
+          stars.forEach(star => {
+              const dx = mouseX - star.x;
+              const dy = mouseY - star.y;
+              const distance = Math.sqrt(dx * dx + dy * dy);
+
+              if (distance < 150 && connectedStars.length < 3) { // Only connect if within a certain distance and limit to three connections
+                  connectedStars.push(star);
+              }
+          });
+
+          connectedStars.forEach(star => {
+              ctx.beginPath();
+              ctx.moveTo(star.x + star.offsetWidth / 2, star.y + star.offsetHeight / 2);
+              ctx.lineTo(mouseX, mouseY);
+              ctx.stroke();
+          });
+      }
+
+    </script>
+
+    <header class="text-white p-6 text-center shadow-md">
+        <h1 class="text-4xl font-bold">Current Location of the International Space Station</h1>
+        <p class="mt-2 text-lg">Real-time tracking of the ISS</p>
+    </header>
+
+    <div class="flex-grow flex items-center justify-center mt-20"> <!-- Adjusted margin-top for fixed header -->
+        <div class="card max-w-lg w-full">
+            <div class="card-inner">
+                <div class="card-front">
+                    <h2 class="text-2xl font-semibold mb-4">ISS Current Position:</h2>
+                    <p><span class="font-medium">Latitude:</span> <span id="latitude">Loading...</span></p>
+                    <p><span class="font-medium">Longitude:</span> <span id="longitude">Loading...</span></p>
+                    <p><span class="font-medium">Altitude:</span> <span id="altitude">Loading...</span></p>
+                    <p><span class="font-medium">Velocity:</span> <span id="velocity">Loading...</span></p>
+                    <p><span class="font-medium">Last Updated:</span> <span id="last-updated">Loading...</span></p>
+                </div>
+                <!-- Removed card-back since it was not needed -->
+                <!-- The card-back section can be removed entirely if not used -->
+                <!-- <div class="card-back">
+                    Data Loading...
+                </div> -->
+            </div>
+        </div>
+    </div>
+
+    <footer class="mt-6 text-center mb-4">
+        <p class="text-gray-600">Data provided by 
+            <a href="https://wheretheiss.at/" target="_blank" class="text-blue-600 underline hover:text-blue-800 transition-colors duration-200">Where the ISS At</a>
+        </p>
+    </footer>
+
+    <script>
+        async function fetchISSLocation() {
+            try {
+                const response = await fetch('https://api.wheretheiss.at/v1/satellites/25544');
+                if (!response.ok) throw new Error('Network response was not ok');
+                const data = await response.json();
+                
+                const latitude = data.latitude.toFixed(6);
+                const longitude = data.longitude.toFixed(6);
+                const altitude = (data.altitude * 0.621371).toFixed(2); // Convert km to miles
+                const velocity = (data.velocity * 0.621371).toFixed(2); // Convert km/h to mph
+                const timestamp = new Date(data.timestamp * 1000).toLocaleString();
+
+                document.getElementById('latitude').innerText = latitude;
+                document.getElementById('longitude').innerText = longitude;
+                document.getElementById('altitude').innerText = altitude + ' miles';
+                document.getElementById('velocity').innerText = velocity + ' mph';
+                document.getElementById('last-updated').innerText = timestamp;
+
+            } catch (error) {
+                console.error('Error fetching ISS location:', error);
+                document.getElementById('latitude').innerText = 'Error';
+                document.getElementById('longitude').innerText = 'Error';
+                document.getElementById('altitude').innerText = 'Error';
+                document.getElementById('velocity').innerText = 'Error';
+                document.getElementById('last-updated').innerText = 'Error';
+            }
+
+            setTimeout(fetchISSLocation, 1000); // Refresh every second
+        }
+
+        fetchISSLocation();
+    </script>
+</body>
+</html>
