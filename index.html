@@ -5,64 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Where is the ISS?</title>
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
-    <style>
-        body {
-            background-color: #000; /* Black background to simulate space */
-            color: #fff; /* White text for contrast */
-            font-family: 'Arial', sans-serif;
-            overflow: hidden; /* Prevent scrollbars */
-            position: relative; /* Position for absolute elements */
-        }
-        .star {
-            position: absolute;
-            border-radius: 50%;
-            background: rgba(255, 255, 255, 0.8);
-            animation: float 3s ease-in-out infinite; /* Floating effect */
-        }
-        @keyframes float {
-            0% { transform: translateY(0); }
-            50% { transform: translateY(-5px); } /* Float up */
-            100% { transform: translateY(0); } /* Float down */
-        }
-        .card {
-            perspective: 1000px; /* Perspective for 3D effect */
-        }
-        .card-inner {
-            transition: transform 0.5s;
-            transform-style: preserve-3d;
-            position: relative;
-        }
-        .card:hover .card-inner {
-            transform: rotateY(10deg) rotateX(5deg); /* Rotate on hover for 3D effect */
-        }
-        .card-front, .card-back {
-            position: absolute;
-            width: 100%;
-            height: auto; /* Allow height to adjust automatically */
-            backface-visibility: hidden;
-            border-radius: 12px;
-        }
-        .card-front {
-            background-color: rgba(255, 255, 255, 0); /* Fully transparent */
-            padding: 2rem; /* Increased padding */
-        }
-        .header {
-            backdrop-filter: blur(10px); /* Blurred background for header */
-            transition: background-color 0.5s ease; /* Smooth transition for background color */
-        }
-
-        header.scrolled {
-            background-color: rgba(0, 0, 0, 0.7); /* Darker transparent background when scrolled */
-        }
-
-        canvas {
-            position: absolute;
-            top: 0;
-            left: 0;
-            pointer-events: none; /* Allow clicks to pass through the canvas */
-        }
-
-    </style>
+    <link href="styles.css" rel="stylesheet">
 </head>
 <body class="flex flex-col min-h-screen">
     <!-- Generate random stars -->
