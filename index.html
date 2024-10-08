@@ -148,6 +148,7 @@
                     <p><span class="font-medium">Altitude:</span> <span id="altitude">Loading...</span></p>
                     <p><span class="font-medium">Velocity:</span> <span id="velocity">Loading...</span></p>
                     <p><span class="font-medium">Last Updated:</span> <span id="last-updated">Loading...</span></p>
+                    <p><span class="font-medium">Closest Country:</span> <span id="closest-country">Loading...</span></p>
                 </div>
                 <!-- Removed card-back since it was not needed -->
                 <!-- The card-back section can be removed entirely if not used -->
@@ -183,6 +184,12 @@
                 document.getElementById('velocity').innerText = velocity + ' mph';
                 document.getElementById('last-updated').innerText = timestamp;
 
+                // Fetch closest country
+                const countryResponse = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=3`);
+                const countryData = await countryResponse.json();
+                const closestCountry = countryData.address.country || 'Over ocean';
+                document.getElementById('closest-country').innerText = closestCountry;
+
             } catch (error) {
                 console.error('Error fetching ISS location:', error);
                 document.getElementById('latitude').innerText = 'Error';
@@ -190,9 +197,10 @@
                 document.getElementById('altitude').innerText = 'Error';
                 document.getElementById('velocity').innerText = 'Error';
                 document.getElementById('last-updated').innerText = 'Error';
+                document.getElementById('closest-country').innerText = 'Error';
             }
 
-            setTimeout(fetchISSLocation, 1000); // Refresh every second
+            setTimeout(fetchISSLocation, 5000); // Refresh every 5 seconds to avoid overloading the geocoding service
         }
 
         fetchISSLocation();
