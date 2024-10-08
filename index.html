@@ -143,12 +143,12 @@
             <div class="card-inner">
                 <div class="card-front">
                     <h2 class="text-2xl font-semibold mb-4">ISS Current Position:</h2>
+                    <p><span class="font-medium">Closest Country:</span> <span id="country">Loading...</span></p>
                     <p><span class="font-medium">Latitude:</span> <span id="latitude">Loading...</span></p>
                     <p><span class="font-medium">Longitude:</span> <span id="longitude">Loading...</span></p>
                     <p><span class="font-medium">Altitude:</span> <span id="altitude">Loading...</span></p>
                     <p><span class="font-medium">Velocity:</span> <span id="velocity">Loading...</span></p>
                     <p><span class="font-medium">Last Updated:</span> <span id="last-updated">Loading...</span></p>
-                    <p><span class="font-medium">Closest Country:</span> <span id="closest-country">Loading...</span></p>
                 </div>
                 <!-- Removed card-back since it was not needed -->
                 <!-- The card-back section can be removed entirely if not used -->
@@ -187,8 +187,12 @@
                 // Fetch closest country
                 const countryResponse = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=3`);
                 const countryData = await countryResponse.json();
-                const closestCountry = countryData.address.country || 'Over ocean';
-                document.getElementById('closest-country').innerText = closestCountry;
+                console.log('Country data:', countryData); // Debug log
+                let closestCountry = 'No nearby country (over water)';
+                if (countryData.address) {
+                    closestCountry = countryData.address.country || countryData.address.continent || 'No nearby country (over water)';
+                }
+                document.getElementById('country').innerText = closestCountry;
 
             } catch (error) {
                 console.error('Error fetching ISS location:', error);
@@ -197,7 +201,7 @@
                 document.getElementById('altitude').innerText = 'Error';
                 document.getElementById('velocity').innerText = 'Error';
                 document.getElementById('last-updated').innerText = 'Error';
-                document.getElementById('closest-country').innerText = 'Error';
+                document.getElementById('country').innerText = 'Error';
             }
 
             setTimeout(fetchISSLocation, 5000); // Refresh every 5 seconds to avoid overloading the geocoding service
