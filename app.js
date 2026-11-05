@@ -3,9 +3,13 @@
 
   const ISS_API = "https://api.wheretheiss.at/v1/satellites/25544";
   const GEOCODE_API = "https://nominatim.openstreetmap.org/reverse";
-  const POLL_MS = 3000;            // ISS position refresh
-  const GEOCODE_MIN_MS = 15000;    // Respect Nominatim's usage policy
-  const TRACK_MINUTES = 45;        // Ground track shown before/after "now"
+  const IMG = "https://cdn.jsdelivr.net/npm/three-globe@2.45.6/example/img";
+  const POLL_MS = 3000;                 // ISS position refresh
+  const GEOCODE_MIN_MS = 15000;         // Respect Nominatim's usage policy
+  const TRACK_MINUTES = 45;             // Ground track shown before/after "now"
+  const TRACK_REFRESH_MS = 10 * 60 * 1000;
+  const EARTH_RADIUS_KM = 6371;
+  const KM_PER_DEG = 111.32;
   const KM_TO_MI = 0.621371;
 
   const $ = (id) => document.getElementById(id);
@@ -15,6 +19,8 @@
     country: $("country"), status: $("status"), statusText: $("status-text"),
     follow: $("follow"),
   };
+  const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const isNarrow = () => window.innerWidth <= 860;
 
   /* ---------------- Units ---------------- */
   let units = "metric";
@@ -60,68 +66,131 @@
     el.statusText.textContent = text;
   }
 
-  /* ---------------- Map ---------------- */
-  const map = L.map("map", {
-    worldCopyJump: true,
-    zoomControl: true,
-    minZoom: 2,
-  }).setView([0, 0], 3);
+  /* ---------------- Globe ---------------- */
+  const globeEl = $("globe");
+  const issAlt = (km) => km / EARTH_RADIUS_KM;   // globe.gl altitude is in Earth radii
 
-  L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
-    subdomains: "abcd",
-    maxZoom: 19,
-  }).addTo(map);
+  const markerEl = document.createElement("div");
+  markerEl.className = "iss-marker";
+  markerEl.textContent = "🛰️";
 
-  const issIcon = L.divIcon({ className: "iss-marker", html: "🛰️", iconSize: [40, 40], iconAnchor: [20, 20] });
-  const marker = L.marker([0, 0], { icon: issIcon, keyboard: false, title: "ISS" }).addTo(map);
-  const footprint = L.circle([0, 0], {
-    radius: 1, color: "#6ee7ff", weight: 1, opacity: 0.5, fillColor: "#6ee7ff", fillOpacity: 0.06,
-  }).addTo(map);
-  const pastTrack = L.polyline([], { color: "#a78bfa", weight: 2, opacity: 0.8 }).addTo(map);
-  const futureTrack = L.polyline([], { color: "#6ee7ff", weight: 2, opacity: 0.7, dashArray: "6 8" }).addTo(map);
+  let issPoint = null;                 // { lat, lng, alt }
+  let tracks = [];                     // [{ kind, points: [[lat, lng, alt], ...] }]
 
-  // Stop auto-follow when the user pans the map themselves.
-  map.on("dragstart", () => { el.follow.checked = false; });
+  const globe = new Globe(globeEl, { animateIn: !reduceMotion })
+    .backgroundColor("rgba(0,0,0,0)")
+    .globeImageUrl(`${IMG}/earth-blue-marble.jpg`)
+    .bumpImageUrl(`${IMG}/earth-topology.png`)
+    .showAtmosphere(true)
+    .atmosphereColor("#6ee7ff")
+    .atmosphereAltitude(0.2)
+    .width(window.innerWidth)
+    .height(window.innerHeight)
+    // ISS marker
+    .htmlElementsData([])
+    .htmlLat("lat").htmlLng("lng").htmlAltitude("alt")
+    .htmlElement(() => markerEl)
+    .htmlTransitionDuration(0)
+    // Ground track
+    .pathsData([])
+    .pathPoints("points")
+    .pathPointLat((p) => p[0]).pathPointLng((p) => p[1]).pathPointAlt((p) => p[2])
+    .pathColor((t) => (t.kind === "past"
+      ? ["rgba(167,139,250,0.15)", "rgba(167,139,250,0.95)"]
+      : ["rgba(110,231,255,0.95)", "rgba(110,231,255,0.15)"]))
+    .pathStroke(2)
+    .pathResolution(4)
+    .pathDashLength((t) => (t.kind === "past" ? 1 : 0.02))
+    .pathDashGap((t) => (t.kind === "past" ? 0 : 0.012))
+    .pathDashAnimateTime((t) => (t.kind === "past" || reduceMotion ? 0 : 40000))
+    .pathTransitionDuration(0)
+    // Visibility footprint: rings radiating from the sub-satellite point
+    .ringsData([])
+    .ringColor(() => (t) => `rgba(110,231,255,${0.6 * (1 - t)})`)
+    .ringMaxRadius("radius")
+    .ringPropagationSpeed(6)
+    .ringRepeatPeriod(reduceMotion ? 0 : 1400);
+
+  // Hide the marker when it is on the far side of the Earth.
+  if (typeof globe.htmlElementVisibilityModifier === "function") {
+    globe.htmlElementVisibilityModifier((elm, isVisible) => { elm.style.opacity = isVisible ? 1 : 0; });
+  }
+
+  const controls = globe.controls();
+  controls.enableDamping = true;
+  controls.minDistance = 130;
+  controls.maxDistance = 900;
+
+  const viewAltitude = () => (isNarrow() ? 2.6 : 2.2);
+  globe.pointOfView({ lat: 20, lng: 0, altitude: viewAltitude() }, 0);
+
+  // Any manual drag turns off auto-follow.
+  controls.addEventListener("start", () => { el.follow.checked = false; });
   el.follow.addEventListener("change", () => {
-    if (el.follow.checked && last) map.panTo([last.latitude, last.longitude]);
+    if (el.follow.checked && issPoint) {
+      globe.pointOfView({ lat: issPoint.lat, lng: issPoint.lng, altitude: viewAltitude() }, 1200);
+    }
   });
 
-  // Split a lat/lon list wherever it crosses the antimeridian so lines don't streak across the map.
-  function splitAntimeridian(points) {
-    const segs = [];
-    let cur = [];
-    for (let i = 0; i < points.length; i++) {
-      if (i > 0 && Math.abs(points[i][1] - points[i - 1][1]) > 180) {
-        segs.push(cur);
-        cur = [];
-      }
-      cur.push(points[i]);
+  // On narrow screens the stats panel is a bottom sheet, so fit the globe into the space above it.
+  const panelEl = document.querySelector(".panel");
+  function sizeGlobe() {
+    const h = isNarrow() ? Math.max(260, Math.round(panelEl.getBoundingClientRect().top) + 24) : innerHeight;
+    globeEl.style.height = `${h}px`;
+    globe.width(innerWidth).height(h);
+  }
+  addEventListener("resize", sizeGlobe);
+  if (window.ResizeObserver) new ResizeObserver(sizeGlobe).observe(panelEl);
+  sizeGlobe();
+
+  // Keep longitudes continuous so paths never jump the long way around at ±180°.
+  function unwrap(points) {
+    for (let i = 1; i < points.length; i++) {
+      let d = points[i][1] - points[i - 1][1];
+      while (d > 180) { points[i][1] -= 360; d -= 360; }
+      while (d < -180) { points[i][1] += 360; d += 360; }
     }
-    if (cur.length) segs.push(cur);
-    return segs;
+    return points;
   }
 
   /* ---------------- Ground track ---------------- */
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
   async function fetchPositions(timestamps) {
     const res = await fetch(`${ISS_API}/positions?timestamps=${timestamps.join(",")}&units=kilometers`);
     if (!res.ok) throw new Error(`positions ${res.status}`);
     return res.json();
   }
 
+  // The API takes at most 10 timestamps per call and ~1 req/s, so fetch in spaced batches.
+  async function fetchTrack(from, to, count) {
+    const step = (to - from) / (count - 1);
+    const ts = Array.from({ length: count }, (_, i) => Math.round(from + i * step));
+    const out = [];
+    for (let i = 0; i < ts.length; i += 10) {
+      if (i) await sleep(1100);
+      out.push(...(await fetchPositions(ts.slice(i, i + 10))));
+    }
+    return unwrap(out.map((p) => [p.latitude, p.longitude, issAlt(p.altitude)]));
+  }
+
   let trackFetchedAt = 0;
+  let trackBusy = false;
   async function updateTrack(nowSec) {
-    // API allows 10 timestamps per request; one request for the past, one for the future.
-    const step = (TRACK_MINUTES * 60) / 9;
-    const past = Array.from({ length: 10 }, (_, i) => Math.round(nowSec - TRACK_MINUTES * 60 + i * step));
-    const future = Array.from({ length: 10 }, (_, i) => Math.round(nowSec + i * step));
+    if (trackBusy) return;
+    trackBusy = true;
     try {
-      const [p, f] = await Promise.all([fetchPositions(past), fetchPositions(future)]);
-      pastTrack.setLatLngs(splitAntimeridian(p.map((x) => [x.latitude, x.longitude])));
-      futureTrack.setLatLngs(splitAntimeridian(f.map((x) => [x.latitude, x.longitude])));
+      const span = TRACK_MINUTES * 60;
+      const past = await fetchTrack(nowSec - span, nowSec, 20);
+      await sleep(1100);
+      const future = await fetchTrack(nowSec, nowSec + span, 20);
+      tracks = [{ kind: "past", points: past }, { kind: "future", points: future }];
+      globe.pathsData(tracks);
       trackFetchedAt = Date.now();
     } catch (err) {
       console.warn("Ground track unavailable:", err);
+    } finally {
+      trackBusy = false;
     }
   }
 
@@ -149,20 +218,20 @@
       const d = await res.json();
       last = d;
 
-      const ll = [d.latitude, d.longitude];
-      marker.setLatLng(ll);
-      footprint.setLatLng(ll).setRadius((d.footprint * 1000) / 2);
-      if (firstFix) {
-        map.setView(ll, 3, { animate: false });
-        firstFix = false;
-      } else if (el.follow.checked) {
-        map.panTo(ll, { animate: true, duration: 1 });
+      issPoint = { lat: d.latitude, lng: d.longitude, alt: issAlt(d.altitude) };
+      globe.htmlElementsData([issPoint]);
+      globe.ringsData([{ lat: d.latitude, lng: d.longitude, radius: d.footprint / 2 / KM_PER_DEG }]);
+
+      if (el.follow.checked) {
+        const pov = { lat: d.latitude, lng: d.longitude, altitude: firstFix ? viewAltitude() : globe.pointOfView().altitude };
+        globe.pointOfView(pov, firstFix ? 2000 : POLL_MS);
       }
+      firstFix = false;
 
       renderStats(d);
       setStatus("live", "Live");
       updateCountry(d.latitude, d.longitude);
-      if (Date.now() - trackFetchedAt > 5 * 60 * 1000) updateTrack(d.timestamp);
+      if (Date.now() - trackFetchedAt > TRACK_REFRESH_MS) updateTrack(d.timestamp);
     } catch (err) {
       console.error("Error fetching ISS location:", err);
       setStatus("error", "Offline — retrying");
@@ -177,60 +246,42 @@
   /* ---------------- Starfield ---------------- */
   const canvas = $("starfield");
   const ctx = canvas.getContext("2d");
-  const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   let stars = [];
-  let mouse = { x: -9999, y: -9999 };
 
-  function resize() {
+  function resizeStars() {
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     canvas.width = innerWidth * dpr;
     canvas.height = innerHeight * dpr;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    const count = Math.round((innerWidth * innerHeight) / 6000);
+    const count = Math.round((innerWidth * innerHeight) / 5000);
     stars = Array.from({ length: count }, () => ({
       x: Math.random() * innerWidth,
       y: Math.random() * innerHeight,
-      r: Math.random() * 1.4 + 0.3,
-      z: Math.random() * 0.6 + 0.2,       // depth → drift speed & brightness
-      tw: Math.random() * Math.PI * 2,    // twinkle phase
+      r: Math.random() * 1.3 + 0.3,
+      z: Math.random() * 0.6 + 0.2,
+      tw: Math.random() * Math.PI * 2,
     }));
   }
 
-  function draw(t) {
+  function drawStars(t) {
     ctx.clearRect(0, 0, innerWidth, innerHeight);
-    const near = [];
+    ctx.fillStyle = "#fff";
     for (const s of stars) {
       if (!reduceMotion) {
-        s.x -= s.z * 0.08;
+        s.x -= s.z * 0.05;
         if (s.x < 0) s.x += innerWidth;
       }
-      const a = 0.5 + 0.5 * Math.sin(t / 900 + s.tw);
+      const a = reduceMotion ? 1 : 0.5 + 0.5 * Math.sin(t / 900 + s.tw);
       ctx.globalAlpha = s.z * (0.5 + a * 0.5);
-      ctx.fillStyle = "#fff";
       ctx.beginPath();
       ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
       ctx.fill();
-      const dx = s.x - mouse.x, dy = s.y - mouse.y;
-      const dist = Math.hypot(dx, dy);
-      if (dist < 140) near.push([s, dist]);
-    }
-    near.sort((a, b) => a[1] - b[1]);
-    for (const [s, dist] of near.slice(0, 4)) {
-      ctx.globalAlpha = (1 - dist / 140) * 0.6;
-      ctx.strokeStyle = "#6ee7ff";
-      ctx.lineWidth = 0.8;
-      ctx.beginPath();
-      ctx.moveTo(s.x, s.y);
-      ctx.lineTo(mouse.x, mouse.y);
-      ctx.stroke();
     }
     ctx.globalAlpha = 1;
-    requestAnimationFrame(draw);
+    requestAnimationFrame(drawStars);
   }
 
-  addEventListener("resize", resize);
-  addEventListener("mousemove", (e) => { mouse = { x: e.clientX, y: e.clientY }; });
-  addEventListener("mouseleave", () => { mouse = { x: -9999, y: -9999 }; });
-  resize();
-  requestAnimationFrame(draw);
+  addEventListener("resize", resizeStars);
+  resizeStars();
+  requestAnimationFrame(drawStars);
 })();
