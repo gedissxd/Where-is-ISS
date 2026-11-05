@@ -4,20 +4,20 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="theme-color" content="#05060f" />
-  <meta name="description" content="Live, real-time tracker for the International Space Station: position, altitude, speed and ground track on an interactive map." />
+  <meta name="description" content="Live, real-time tracker for the International Space Station on an interactive 3D globe." />
   <title>Where is the ISS?</title>
 
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="styles.css" />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛰️</text></svg>" />
 </head>
 <body>
   <canvas id="starfield" aria-hidden="true"></canvas>
+  <div id="globe" aria-label="3D globe showing the ISS position"></div>
 
-  <div class="app">
+  <div class="overlay">
     <header class="topbar">
       <div class="brand">
         <span class="brand-icon" aria-hidden="true">🛰️</span>
@@ -37,60 +37,58 @@
       </div>
     </header>
 
-    <main class="layout">
-      <section class="map-card glass" aria-label="Map">
-        <div id="map"></div>
-        <div class="map-controls">
-          <label class="follow">
-            <input type="checkbox" id="follow" checked />
-            <span>Follow ISS</span>
-          </label>
+    <aside class="panel">
+      <div class="glass location-card">
+        <span class="label">Currently over</span>
+        <div class="location" id="country">Locating…</div>
+        <div class="coords mono">
+          <span id="latitude">—</span>
+          <span id="longitude">—</span>
         </div>
-      </section>
+      </div>
 
-      <aside class="side">
-        <div class="glass location-card">
-          <span class="label">Currently over</span>
-          <div class="location" id="country">Locating…</div>
-          <div class="coords mono">
-            <span id="latitude">—</span>
-            <span id="longitude">—</span>
-          </div>
+      <div class="stats">
+        <div class="glass stat">
+          <span class="label">Altitude</span>
+          <span class="value mono"><span id="altitude">—</span><small data-unit-label="dist">km</small></span>
         </div>
+        <div class="glass stat">
+          <span class="label">Velocity</span>
+          <span class="value mono"><span id="velocity">—</span><small data-unit-label="speed">km/h</small></span>
+        </div>
+        <div class="glass stat">
+          <span class="label">Visibility</span>
+          <span class="value" id="visibility">—</span>
+        </div>
+        <div class="glass stat">
+          <span class="label">Footprint</span>
+          <span class="value mono"><span id="footprint">—</span><small data-unit-label="dist">km</small></span>
+        </div>
+      </div>
 
-        <div class="stats">
-          <div class="glass stat">
-            <span class="label">Altitude</span>
-            <span class="value mono"><span id="altitude">—</span><small data-unit-label="dist">km</small></span>
-          </div>
-          <div class="glass stat">
-            <span class="label">Velocity</span>
-            <span class="value mono"><span id="velocity">—</span><small data-unit-label="speed">km/h</small></span>
-          </div>
-          <div class="glass stat">
-            <span class="label">Visibility</span>
-            <span class="value" id="visibility">—</span>
-          </div>
-          <div class="glass stat">
-            <span class="label">Footprint</span>
-            <span class="value mono"><span id="footprint">—</span><small data-unit-label="dist">km</small></span>
-          </div>
-        </div>
+      <div class="glass controls">
+        <label class="switch">
+          <input type="checkbox" id="follow" checked />
+          <span class="track" aria-hidden="true"></span>
+          <span>Follow ISS</span>
+        </label>
+        <span class="mono updated" id="last-updated">—</span>
+      </div>
 
-        <div class="glass meta">
-          <span class="label">Last updated</span>
-          <span class="mono" id="last-updated">—</span>
-        </div>
-      </aside>
-    </main>
+      <div class="legend">
+        <span><i class="swatch past"></i>Last 45 min</span>
+        <span><i class="swatch future"></i>Next 45 min</span>
+      </div>
+    </aside>
 
     <footer class="footer">
       Data from <a href="https://wheretheiss.at/" target="_blank" rel="noopener">Where the ISS At</a>
       · Geocoding by <a href="https://nominatim.openstreetmap.org/" target="_blank" rel="noopener">Nominatim</a>
+      · Earth imagery: NASA Blue Marble
     </footer>
   </div>
 
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/globe.gl@2.45.3/dist/globe.gl.min.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
